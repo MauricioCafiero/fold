@@ -76,9 +76,10 @@ SMILES: CC(C)C1=NC(=NC(=C1)...
 
 `--input-file` takes precedence over `--sequence`/`--smiles` if both are
 given. If `--job-name` isn't also given, it's derived from the input file's
-stem (`hmgcr_rosuvastatin.txt` → job name `hmgcr_rosuvastatin`) instead of
-falling back to the smoke-test name — pass `--job-name` explicitly to
-override. Same behavior applies identically to the RF3 CLI below.
+stem (`hmgcr_rosuvastatin.txt` → job name `hmgcr_rosuvastatin`); with
+neither `--input-file` nor `--job-name`, it falls back to the neutral name
+`prediction` rather than anything tied to the built-in smoke test. Same
+behavior applies identically to the RF3 CLI below.
 
 MSAs are computed remotely via the ColabFold MSA server (no local sequence
 databases needed). Output structures (`.cif`), per-sample confidence scores,
