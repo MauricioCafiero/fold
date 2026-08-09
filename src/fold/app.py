@@ -121,9 +121,15 @@ def predict(query_chains: list[dict], job_name: str) -> dict[str, bytes]:
 def main(
     sequence: str = "",
     smiles: str = "",
+    input_file: str = "",
     gpu: str = "A10G",
     job_name: str = "hmgcr_rosuvastatin_smoketest",
 ):
+    if input_file:
+        from fold.inputs import parse_sequence_smiles_file
+
+        sequence, smiles = parse_sequence_smiles_file(input_file)
+
     if not sequence or not smiles:
         from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES
 

@@ -59,6 +59,25 @@ Omit `--sequence`/`--smiles` to run the built-in smoke test instead: human
 HMG-CoA reductase (catalytic domain, the exact construct from [PDB
 1HWL](https://www.rcsb.org/structure/1HWL)) cofolded with rosuvastatin.
 
+Or point at a plain-text file instead of typing the sequence/SMILES inline:
+
+```bash
+uv run modal run --detach src/fold/app.py::main \
+  --input-file examples/hmgcr_rosuvastatin.txt \
+  --job-name my_target
+```
+
+The file format is two lines (order doesn't matter, prefixes are
+case-insensitive):
+
+```
+SEQUENCE: MLSRLFRMHGLFVASHPWEVIVG...
+SMILES: CC(C)C1=NC(=NC(=C1)...
+```
+
+`--input-file` takes precedence over `--sequence`/`--smiles` if both are
+given. Same flag works identically for the RF3 CLI below.
+
 MSAs are computed remotely via the ColabFold MSA server (no local sequence
 databases needed). Output structures (`.cif`), per-sample confidence scores,
 and run metadata land in `outputs/<job_name>/`.
@@ -120,6 +139,17 @@ sim = cosine_similarity(seq_a, seq_b)
 Uses `facebook/esm2_t33_650M_UR50D` by default; pass `model_name=` to use a
 different ESM2 checkpoint size.
 
+## Development
+
+Local-only checks that don't touch Modal or GPUs:
+
+```bash
+uv run pytest
+```
+
+Currently covers the `SEQUENCE:`/`SMILES:` input-file parser
+(`fold.inputs.parse_sequence_smiles_file`).
+
 ## Smoke tests
 
 All four paths have been run end-to-end and verified, using human HMG-CoA
@@ -145,6 +175,13 @@ reductase (HMGCR) as the test protein throughout:
 - **ESM2 embeddings** — cosine similarity of the HMGCR sequence against
   itself (1.0000, as expected) and against a partially-scrambled decoy
   (0.9158, correctly lower).
+
+The `--input-file` option (`fold.inputs.parse_sequence_smiles_file`) is
+covered by local unit tests (`uv run pytest`) instead of a Modal run — the
+parser itself is what's new, not the fold/GPU path it feeds into, which is
+already covered above. `examples/hmgcr_rosuvastatin.txt` is verified to
+parse to the exact same sequence/SMILES used in the OpenFold3/RF3 runs
+above.
 
 ## Cost notes
 

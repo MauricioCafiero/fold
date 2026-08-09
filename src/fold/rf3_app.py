@@ -174,10 +174,16 @@ def predict(query_components: list[dict], job_name: str, use_msa: bool = True) -
 def main(
     sequence: str = "",
     smiles: str = "",
+    input_file: str = "",
     gpu: str = "A10G",
     job_name: str = "hmgcr_rosuvastatin_smoketest",
     use_msa: bool = True,
 ):
+    if input_file:
+        from fold.inputs import parse_sequence_smiles_file
+
+        sequence, smiles = parse_sequence_smiles_file(input_file)
+
     if not sequence or not smiles:
         from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES
 
