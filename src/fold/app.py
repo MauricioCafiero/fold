@@ -118,19 +118,29 @@ def predict(query_chains: list[dict], job_name: str) -> dict[str, bytes]:
 
 
 @app.local_entrypoint()
-def main(gpu: str = "A10G", job_name: str = "hmgcr_rosuvastatin_smoketest"):
-    from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES
+def main(
+    sequence: str = "",
+    smiles: str = "",
+    gpu: str = "A10G",
+    job_name: str = "hmgcr_rosuvastatin_smoketest",
+):
+    if not sequence or not smiles:
+        from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES
+
+        sequence = sequence or HMGCR_1HWL_SEQUENCE
+        smiles = smiles or ROSUVASTATIN_SMILES
+        print("no --sequence/--smiles given, using HMGCR + rosuvastatin as a smoke test")
 
     query_chains = [
         {
             "molecule_type": "protein",
             "chain_ids": ["A"],
-            "sequence": HMGCR_1HWL_SEQUENCE,
+            "sequence": sequence,
         },
         {
             "molecule_type": "ligand",
             "chain_ids": ["Z"],
-            "smiles": ROSUVASTATIN_SMILES,
+            "smiles": smiles,
         },
     ]
 
