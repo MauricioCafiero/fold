@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Generated prediction outputs (structures, confidences) -- reproducible, not source
+outputs/
+
+# Claude Code local session/permission settings
+.claude/
