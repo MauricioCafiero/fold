@@ -170,6 +170,46 @@ sim = cosine_similarity(seq_a, seq_b)
 Uses `facebook/esm2_t33_650M_UR50D` by default; pass `model_name=` to use a
 different ESM2 checkpoint size.
 
+## Post-processing
+
+### CIF → PDB conversion
+
+For MD tools (GROMACS, OpenMM, AMBER, ...) that want PDB input:
+
+```bash
+python -m fold.analyze cif-to-pdb outputs/hmgcr_rosuvastatin_smoketest/hmgcr_rosuvastatin_smoketest/seed_42/hmgcr_rosuvastatin_smoketest_seed_42_sample_5_model.cif
+```
+
+Uses [gemmi](https://gemmi.readthedocs.io/); preserves chains, HETATM
+records, and per-atom B-factors (pLDDT).
+
+### Binding energy (AutoDock Vina)
+
+Calculates a real, numeric binding affinity for a cofolded complex — not
+just a confidence score. Needs the optional `docking` extra and the
+`obabel` CLI (Open Babel) on PATH:
+
+```bash
+uv sync --extra docking
+python -m fold.analyze binding-energy outputs/hmgcr_rosuvastatin_smoketest \
+  --smiles "YOUR_LIGAND_SMILES"
+```
+
+Picks the best-ranked structure from the job's output directory
+(`fold.results.find_best_cif` — RF3 already promotes an aggregate top pick;
+OpenFold3 compares all samples by their ranking-score confidence field),
+converts it to PDB, splits out the ligand (chain auto-detected from HETATM
+records — OpenFold3 and RF3 don't agree on a chain letter for it), and runs
+AutoDock Vina with the search box **anchored at the ligand's own predicted
+position** — not a blind pocket search, not a from-scratch redock — so the
+reported affinity reflects the pose the cofolding tool actually produced.
+
+The docking code (`fold.vina_dock_core`) is adapted from
+[MauricioCafiero/dock_assist](https://github.com/MauricioCafiero/dock_assist)
+— vendored directly into this repo (not an external/sibling-directory
+dependency), trimmed to the single "dock at a known site" path used here.
+Vina uses all available CPU cores by default, no config needed.
+
 ## Development
 
 Local-only checks that don't touch Modal or GPUs:
@@ -178,8 +218,12 @@ Local-only checks that don't touch Modal or GPUs:
 uv run pytest
 ```
 
-Currently covers the `SEQUENCE:`/`SMILES:` input-file parser
-(`fold.inputs.parse_sequence_smiles_file`).
+Covers the `SEQUENCE:`/`SMILES:` input-file parser
+(`fold.inputs.parse_sequence_smiles_file`), picking the best-ranked
+structure from a job's output directory (`fold.results.find_best_cif`),
+and the receptor/ligand-splitting logic in `fold.binding_energy` — all pure
+file-parsing logic, tested against realistic fixtures without needing Vina,
+`obabel`, or a GPU.
 
 ## Smoke tests
 
@@ -213,6 +257,15 @@ reductase (HMGCR) as the test protein throughout:
 - **ESM2 embeddings** — cosine similarity of the HMGCR sequence against
   itself (1.0000, as expected) and against a partially-scrambled decoy
   (0.9158, correctly lower).
+- **Binding energy (Vina docking)** — computed for both cofolded complexes
+  above, anchored at each tool's own predicted rosuvastatin position:
+  **-6.2 kcal/mol** (OpenFold3, ligand chain auto-detected as `Z`) and
+  **-6.1 kcal/mol** (RF3, auto-detected as `B` — confirming the
+  auto-detection actually matters, since the two tools don't agree on a
+  ligand chain letter). Close agreement between two independently-cofolded
+  poses, and a physically reasonable affinity for a statin (Vina's scoring
+  function is known to run somewhat less negative than experimental values,
+  but this is squarely in "genuine binder" territory, not noise).
 
 The `--input-file` option (`fold.inputs.parse_sequence_smiles_file`) is
 covered by local unit tests (`uv run pytest`) instead of a Modal run — the

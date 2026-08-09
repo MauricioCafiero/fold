@@ -7,12 +7,21 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "gemmi>=0.7.5",
     "modal>=1.5.3",
     "rdkit>=2026.3.5",
     "requests>=2.34.2",
     "torch>=2.13.0",
     "transformers>=5.14.1",
     "typer>=0.27.1",
+]
+
+[project.optional-dependencies]
+docking = [
+    "scipy>=1.14",
+    "scikit-learn>=1.5",
+    "dockstring>=0.3.3",
+    "openbabel-wheel>=3.1.1",
 ]
 
 [project.scripts]
