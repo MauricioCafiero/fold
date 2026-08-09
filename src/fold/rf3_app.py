@@ -176,13 +176,16 @@ def main(
     smiles: str = "",
     input_file: str = "",
     gpu: str = "A10G",
-    job_name: str = "hmgcr_rosuvastatin_smoketest",
+    job_name: str = "",
     use_msa: bool = True,
 ):
     if input_file:
         from fold.inputs import parse_sequence_smiles_file
 
         sequence, smiles = parse_sequence_smiles_file(input_file)
+        job_name = job_name or Path(input_file).stem
+
+    job_name = job_name or "hmgcr_rosuvastatin_smoketest"
 
     if not sequence or not smiles:
         from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES

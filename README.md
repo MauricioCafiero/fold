@@ -63,8 +63,7 @@ Or point at a plain-text file instead of typing the sequence/SMILES inline:
 
 ```bash
 uv run modal run --detach src/fold/app.py::main \
-  --input-file examples/hmgcr_rosuvastatin.txt \
-  --job-name my_target
+  --input-file examples/hmgcr_rosuvastatin.txt
 ```
 
 The file format is two lines (order doesn't matter, prefixes are
@@ -76,7 +75,10 @@ SMILES: CC(C)C1=NC(=NC(=C1)...
 ```
 
 `--input-file` takes precedence over `--sequence`/`--smiles` if both are
-given. Same flag works identically for the RF3 CLI below.
+given. If `--job-name` isn't also given, it's derived from the input file's
+stem (`hmgcr_rosuvastatin.txt` → job name `hmgcr_rosuvastatin`) instead of
+falling back to the smoke-test name — pass `--job-name` explicitly to
+override. Same behavior applies identically to the RF3 CLI below.
 
 MSAs are computed remotely via the ColabFold MSA server (no local sequence
 databases needed). Output structures (`.cif`), per-sample confidence scores,
