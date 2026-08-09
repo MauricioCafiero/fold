@@ -41,6 +41,34 @@ HuggingFace Hub cache (`~/.cache/huggingface`), which works the same way.
    This opens a browser flow and writes a token to `~/.modal.toml`. Verify it
    worked with `uv run modal profile current`.
 
+### No Modal account? Use the Colab notebook instead
+
+[`notebooks/fold_colab.ipynb`](notebooks/fold_colab.ipynb) runs the same
+four tools directly on a Colab GPU runtime instead of dispatching to Modal —
+open it in Google Colab, no Modal account needed. It shares the exact same
+core logic as the Modal apps (`fold.openfold3_core`, `fold.rf3_core`,
+`fold.esmfold_core`), just invoked in-process instead of on a remote
+container.
+
+**⚠️ Experimental** — this path hasn't been run end-to-end on live Colab yet
+(unlike everything else in this README, which has real verified results
+below). The model-running logic itself isn't new or unverified — it's the
+same `run_predict`/`fold_sequence` functions the Modal apps call, confirmed
+working via the smoke tests below. What's untested is specifically the
+Colab install environment: `pip install openfold3[deepspeed]` /
+`rc-foundry[rf3]` / `transformers` on whatever CUDA/driver/preinstalled-torch
+versions Colab happens to be running, which can shift over time. This
+caveat comes out once someone confirms a clean run.
+
+Also usable directly (no notebook) on any machine with a CUDA GPU already
+set up:
+
+```bash
+python -m fold.local_run openfold3 --input-file examples/hmgcr_rosuvastatin.txt
+python -m fold.local_run rf3 --sequence "..." --smiles "..."
+python -m fold.local_run esmfold --sequence "..."
+```
+
 ## Usage
 
 ### Protein/ligand cofolding (OpenFold3)

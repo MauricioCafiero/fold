@@ -1,14 +1,13 @@
 """Modal app: ESMFold single-sequence structure prediction.
 
 ESMFold's backbone is the 3B-parameter ESM2 model (~11GB of fp32 weights) --
-too large to load comfortably on a 14GB-RAM CPU-only laptop alongside
-everything else, so (like OpenFold3 cofolding) this runs on a Modal GPU
-worker instead of locally.
-
-No MSA search needed (that's the point of ESMFold vs AlphaFold-style
-models), so unlike the cofolding app this needs no big preprocessing
-pipeline -- just the HF checkpoint, cached in a Modal Volume so the
-multi-GB download only happens once.
+too large to load comfortably on most CPU-only laptops, so this runs on a
+Modal GPU worker instead of locally (or on any CUDA machine directly via
+local_run.py / the Colab notebook, sharing esmfold_core.py). No MSA search
+needed (that's the point of ESMFold vs AlphaFold-style models), so unlike
+the cofolding apps this needs no big preprocessing pipeline -- just the HF
+checkpoint, cached in a Modal Volume so the multi-GB download only happens
+once.
 """
 
 from pathlib import Path
@@ -17,14 +16,15 @@ import modal
 
 APP_NAME = "esmfold"
 HF_CACHE_DIR = "/hf-cache"
-MODEL_NAME = "facebook/esmfold_v1"
 
 app = modal.App(APP_NAME)
 
 hf_cache_volume = modal.Volume.from_name("esmfold-hf-cache", create_if_missing=True)
 
-image = modal.Image.debian_slim(python_version="3.12").pip_install(
-    "torch", "transformers", "accelerate"
+image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .pip_install("torch", "transformers", "accelerate")
+    .add_local_python_source("fold")
 )
 
 
@@ -37,26 +37,12 @@ image = modal.Image.debian_slim(python_version="3.12").pip_install(
 def fold_sequence(sequence: str) -> bytes:
     import os
 
-    import torch
-    from transformers import AutoTokenizer, EsmForProteinFolding
+    from fold.esmfold_core import fold_sequence as _fold_sequence
 
     os.environ["HF_HOME"] = HF_CACHE_DIR
-
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = EsmForProteinFolding.from_pretrained(MODEL_NAME, low_cpu_mem_usage=True)
-    model = model.cuda()
-    model.eval()
-
-    tokens = tokenizer([sequence], return_tensors="pt", add_special_tokens=False)
-    tokens = {k: v.cuda() for k, v in tokens.items()}
-
-    with torch.no_grad():
-        output = model(**tokens)
-
-    pdb_str = model.output_to_pdb(output)[0]
-
+    pdb_bytes = _fold_sequence(sequence)
     hf_cache_volume.commit()
-    return pdb_str.encode()
+    return pdb_bytes
 
 
 @app.local_entrypoint()
