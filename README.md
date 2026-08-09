@@ -192,6 +192,13 @@ reductase (HMGCR) as the test protein throughout:
   FBI), MSA computed via the ColabFold server. Result: `avg_plddt` 91.3,
   `ptm` 0.90, `iptm` 0.87, `has_clash` 0.0 — a confident, clash-free
   prediction, consistent with the real crystal structure it's based on.
+
+  ![Predicted rosuvastatin binding site](smoke_test.png)
+
+  The predicted binding pose is a reasonable approximation of the true
+  (crystallographic) binding site — several of the residues OpenFold3
+  places in contact with the ligand match residues known experimentally to
+  bind it in 1HWL.
 - **RosettaFold3 cofolding** — same protein + ligand, MSA fetched from the
   ColabFold server as described above. Result: `overall_plddt` 0.87, `ptm`
   0.86, `iptm` 0.84, `has_clash` false — closely tracking OpenFold3's
