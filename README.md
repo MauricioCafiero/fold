@@ -81,12 +81,14 @@ uv run modal run --detach src/fold/rf3_app.py::main \
 ```
 
 Omit `--sequence`/`--smiles` for the same HMGCR + rosuvastatin smoke test.
-Unlike the OpenFold3 path, this one does **not** compute an MSA automatically
-— the RF3 CLI accepts a precomputed `msa_path` (`.a3m`/`.fasta`) per protein
-component, but has no equivalent of `--use_msa_server`. Without one it runs
-effectively single-sequence, which noticeably lowers confidence scores (see
-Smoke tests below) — for a fair comparison against OpenFold3, generate an
-MSA yourself and wire it into `query_components` in `rf3_app.py`.
+
+RF3's own CLI has no MSA search built in (its README says on-the-fly MSA
+computation is "on the roadmap", not implemented yet) — only a `msa_path`
+field for a precomputed `.a3m`/`.fasta`. `rf3_app.py` fills that gap itself:
+by default (`--use-msa`, on unless you pass `--no-use-msa`) it queries the
+same public ColabFold MSA server OpenFold3 uses internally, saves the result
+as an `.a3m`, and wires it in per protein component before calling `rf3
+fold`. This is what makes the RF3 vs. OpenFold3 comparison below fair.
 
 Output lands in `outputs/rf3_<job_name>/`, structured as `.cif` models plus
 `_confidences.json`/`_summary_confidences.json` per sample.
@@ -129,12 +131,14 @@ reductase (HMGCR) as the test protein throughout:
   FBI), MSA computed via the ColabFold server. Result: `avg_plddt` 91.3,
   `ptm` 0.90, `iptm` 0.87, `has_clash` 0.0 — a confident, clash-free
   prediction, consistent with the real crystal structure it's based on.
-- **RosettaFold3 cofolding** — same protein + ligand, but no MSA supplied
-  (see caveat above). Result: `overall_plddt` 0.67, `ptm` 0.36, `iptm` 0.39,
-  `has_clash` false — ran cleanly with no errors, but noticeably
-  lower-confidence than the MSA-backed OpenFold3 run. Not a fair
-  method-vs-method comparison as configured; mainly confirms the pipeline
-  itself works.
+- **RosettaFold3 cofolding** — same protein + ligand, MSA fetched from the
+  ColabFold server as described above. Result: `overall_plddt` 0.87, `ptm`
+  0.86, `iptm` 0.84, `has_clash` false — closely tracking OpenFold3's
+  numbers on the same target, which is the point: two independent methods
+  agreeing is a stronger signal than either one's confidence score alone.
+  (Without an MSA, the same run instead gave `overall_plddt` 0.67, `ptm`
+  0.36, `iptm` 0.39 — still clash-free and structurally valid, but a much
+  less confident prediction, which is why the MSA step above exists.)
 - **ESMFold** — same HMGCR sequence, single-chain (no ligand). Produced a
   valid 3,483-atom PDB structure with per-residue confidence in the B-factor
   column.
