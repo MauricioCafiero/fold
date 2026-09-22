@@ -1,6 +1,6 @@
 import pytest
 
-from fold.inputs import parse_sequence_smiles_file
+from fold.inputs import CofoldInput, parse_input_file, parse_sequence_smiles_file
 
 
 def test_parses_basic_two_line_file(tmp_path):
@@ -64,4 +64,43 @@ def test_empty_file_raises(tmp_path):
     f.write_text("")
 
     with pytest.raises(ValueError):
+        parse_sequence_smiles_file(f)
+
+
+def test_parse_input_file_dimer_without_smiles(tmp_path):
+    f = tmp_path / "dimer.txt"
+    f.write_text("SEQUENCE: MLS\nSEQUENCE_B: TET\n")
+
+    parsed = parse_input_file(f)
+
+    assert parsed == CofoldInput(sequence="MLS", smiles="", sequence_b="TET")
+    assert parsed.is_dimer
+
+
+def test_parse_input_file_with_all_three_lines(tmp_path):
+    f = tmp_path / "input.txt"
+    f.write_text("SEQUENCE: MLS\nSMILES: CCO\nSEQUENCE_B: TET\n")
+
+    parsed = parse_input_file(f)
+
+    assert parsed == CofoldInput(sequence="MLS", smiles="CCO", sequence_b="TET")
+    assert not parsed.is_dimer
+
+
+def test_parse_input_file_requires_smiles_or_second_sequence(tmp_path):
+    f = tmp_path / "input.txt"
+    f.write_text("SEQUENCE: MLS\n")
+
+    with pytest.raises(ValueError, match="SMILES.*SEQUENCE_B"):
+        parse_input_file(f)
+
+
+def test_parse_sequence_smiles_file_still_rejects_dimer_file(tmp_path):
+    """The RF3/ESMFold path doesn't take a second sequence: a file with only
+    SEQUENCE + SEQUENCE_B is fine for parse_input_file but not for the
+    protein+ligand-only parser."""
+    f = tmp_path / "dimer.txt"
+    f.write_text("SEQUENCE: MLS\nSEQUENCE_B: TET\n")
+
+    with pytest.raises(ValueError, match="SEQUENCE.*SMILES"):
         parse_sequence_smiles_file(f)

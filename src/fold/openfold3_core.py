@@ -12,13 +12,20 @@ import json
 import subprocess
 from pathlib import Path
 
-# Plain HTTPS mirror of the S3 object from the OpenFold3 install docs
+# OpenBind checkpoint that ships with openfold3 0.5.0 (v0.5.0, "OpenBind
+# Model Release") -- plain HTTPS mirror of the RODA bucket object from the
+# OpenFold3 install docs
 # (https://openfold-3.readthedocs.io/en/latest/Installation.html), which
-# document `aws s3 cp s3://openfold/staging/of3-p2-155k.pt ... --no-sign-request`.
-# Verified reachable directly over HTTPS with a matching Content-Length, so
-# no aws-cli dependency is needed to fetch it.
-WEIGHTS_URL = "https://openfold.s3.amazonaws.com/staging/of3-p2-155k.pt"
-WEIGHTS_FILENAME = "of3-p2-155k.pt"
+# document `aws s3 cp s3://openfold3-data/openfold3-parameters/of3-ob-2025-06-30-174k.pt ... --no-sign-request`.
+# Verified reachable directly over HTTPS (200, Content-Length 2287872989).
+# NOTE: this pairs with openfold3 >= 0.5.0 -- the earlier of3-p2-155k.pt
+# checkpoint belongs to the 0.4.x architecture (its state_dict layout, e.g.
+# per-block attention layer_norm_z, no longer matches 0.5's model).
+WEIGHTS_URL = (
+    "https://openfold3-data.s3.amazonaws.com/openfold3-parameters/"
+    "of3-ob-2025-06-30-174k.pt"
+)
+WEIGHTS_FILENAME = "of3-ob-2025-06-30-174k.pt"
 
 
 def ensure_weights(cache_dir: Path) -> Path:
@@ -36,11 +43,26 @@ def ensure_weights(cache_dir: Path) -> Path:
     return dst
 
 
-def build_query_chains(sequence: str, smiles: str) -> list[dict]:
-    return [
-        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": sequence},
-        {"molecule_type": "ligand", "chain_ids": ["Z"], "smiles": smiles},
-    ]
+def build_query_chains(
+    sequence: str, smiles: str = "", second_sequence: str = ""
+) -> list[dict]:
+    """Chains for one query: protein (+ optional partner) + optional ligand.
+
+    With `second_sequence` set this is a protein-protein (dimer) query --
+    chains A and B, no ligand unless a `smiles` is also given.
+    """
+    chains = [{"molecule_type": "protein", "chain_ids": ["A"], "sequence": sequence}]
+    if second_sequence:
+        chains.append(
+            {"molecule_type": "protein", "chain_ids": ["B"], "sequence": second_sequence}
+        )
+    if smiles:
+        chains.append({"molecule_type": "ligand", "chain_ids": ["Z"], "smiles": smiles})
+    if len(chains) < 2:
+        raise ValueError(
+            "need a second protein sequence (sequence_b) or a ligand SMILES"
+        )
+    return chains
 
 
 def run_predict(
@@ -49,6 +71,7 @@ def run_predict(
     job_name: str,
     cache_dir: Path,
     output_dir: Path,
+    second_sequence: str = "",
     work_dir: Path = Path("/tmp"),
 ) -> Path:
     """Run one OpenFold3 cofolding job. Returns the job's output directory.
@@ -62,7 +85,7 @@ def run_predict(
     # pydantic schema in inference_query_format.py, which differs from the
     # readthedocs example).
     query = {
-        "chains": build_query_chains(sequence, smiles),
+        "chains": build_query_chains(sequence, smiles, second_sequence),
         "use_msas": True,
         "use_main_msas": True,
         "use_paired_msas": True,

@@ -42,6 +42,7 @@ def _resolve_job_name(job_name: str, input_file: str) -> str:
 @app.command()
 def openfold3(
     sequence: str = "",
+    sequence_b: str = "",
     smiles: str = "",
     input_file: str = "",
     job_name: str = "",
@@ -51,11 +52,27 @@ def openfold3(
     """Run OpenFold3 cofolding on this machine's GPU."""
     from fold.openfold3_core import run_predict
 
-    sequence, smiles = _resolve_sequence_smiles(sequence, smiles, input_file)
+    if input_file:
+        from fold.inputs import parse_input_file
+
+        parsed = parse_input_file(input_file)
+        sequence, smiles, sequence_b = parsed.sequence, parsed.smiles, parsed.sequence_b
+    if sequence_b and not sequence:
+        raise ValueError("--sequence is required together with --sequence-b")
+    if not sequence_b and (not sequence or not smiles):
+        sequence, smiles = _resolve_sequence_smiles(sequence, smiles, input_file)
+
     job_name = _resolve_job_name(job_name, input_file)
 
-    job_out = run_predict(sequence, smiles, job_name, Path(cache_dir), Path(output_dir))
+    job_out = run_predict(
+        sequence, smiles, job_name, Path(cache_dir), Path(output_dir),
+        second_sequence=sequence_b,
+    )
     print(f"done -- outputs in {job_out}")
+
+    from fold.analyze import report_interface_scores
+
+    report_interface_scores(job_out)
 
 
 @app.command()
@@ -78,6 +95,10 @@ def rf3(
         sequence, smiles, job_name, Path(cache_dir), Path(output_dir), use_msa=use_msa
     )
     print(f"done -- outputs in {job_out}")
+
+    from fold.analyze import report_interface_scores
+
+    report_interface_scores(job_out)
 
 
 @app.command()

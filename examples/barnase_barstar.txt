@@ -1,0 +1,6 @@
+# Barnase-barstar heterodimer (protein+protein / dimer query, no ligand).
+# Barnase: UniProt P00648 minus its 27-aa signal peptide; barstar: full
+# P11540. Classic high-affinity heterodimer used to verify interface
+# scoring (ipSAE ~0.86 for this complex).
+SEQUENCE: TETSSHKAHTEAQVINTFDGVADYLQTYHKLPDNYITKSEAQALGWVASKGNLADVAPGKSIGGDIFSNREGKLPGKSGRTWREADINYTSGFRNSDRILYSSDWLIYKTTDHYQTFTKIR
+SEQUENCE_B: MKKAVINGEQIRSISDLHQTLKKELALPEYYGENLDALWDCLTGWVEYPLVLEWRQFEQSKQLTENGAESVLQVFREAKAEGCDITIILS

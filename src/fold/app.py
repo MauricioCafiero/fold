@@ -22,7 +22,13 @@ weights_volume = modal.Volume.from_name("openfold3-weights", create_if_missing=T
 outputs_volume = modal.Volume.from_name("openfold3-outputs", create_if_missing=True)
 
 image = modal.Image.from_registry(
-    "openfoldconsortium/openfold3:stable", add_python="3.12"
+    # 0.5-conda (2026-08-21, = PyPI openfold3 0.5.0) is the newest build of
+    # the conda-structured image family; `stable` is frozen at 2026-03-30 and
+    # predates openfold3 PR #142, which added the PAE matrix to full
+    # confidence output -- needed by fold.ipsae. (The 0.5-pixi variant breaks
+    # the Modal runner: pixi's env shadows modal's injected deps --
+    # ModuleNotFoundError grpclib -- so we stick to the -conda packaging.)
+    "openfoldconsortium/openfold3:0.5-conda", add_python="3.12"
 ).pip_install(
     # The published image itself ships a typing_extensions too old for its own
     # pinned pydantic-core (deepspeed -> pydantic -> pydantic_core needs
@@ -39,12 +45,15 @@ image = modal.Image.from_registry(
     volumes={CACHE_DIR: weights_volume, OUTPUT_DIR: outputs_volume},
     timeout=30 * 60,
 )
-def predict(sequence: str, smiles: str, job_name: str) -> dict[str, bytes]:
+def predict(
+    sequence: str, smiles: str, job_name: str, second_sequence: str = ""
+) -> dict[str, bytes]:
     """Run one OpenFold3 cofolding query and return output files as bytes."""
     from fold.openfold3_core import run_predict
 
     job_out = run_predict(
-        sequence, smiles, job_name, Path(CACHE_DIR), Path(OUTPUT_DIR)
+        sequence, smiles, job_name, Path(CACHE_DIR), Path(OUTPUT_DIR),
+        second_sequence=second_sequence,
     )
     weights_volume.commit()
     outputs_volume.commit()
@@ -59,20 +68,25 @@ def predict(sequence: str, smiles: str, job_name: str) -> dict[str, bytes]:
 @app.local_entrypoint()
 def main(
     sequence: str = "",
+    sequence_b: str = "",
     smiles: str = "",
     input_file: str = "",
     gpu: str = "A10G",
     job_name: str = "",
 ):
     if input_file:
-        from fold.inputs import parse_sequence_smiles_file
+        from fold.inputs import parse_input_file
 
-        sequence, smiles = parse_sequence_smiles_file(input_file)
+        parsed = parse_input_file(input_file)
+        sequence, smiles, sequence_b = parsed.sequence, parsed.smiles, parsed.sequence_b
         job_name = job_name or Path(input_file).stem
 
     job_name = job_name or "prediction"
 
-    if not sequence or not smiles:
+    if sequence_b and not sequence:
+        raise ValueError("--sequence is required together with --sequence-b")
+
+    if not sequence_b and (not sequence or not smiles):
         from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES
 
         sequence = sequence or HMGCR_1HWL_SEQUENCE
@@ -81,7 +95,7 @@ def main(
 
     fn = predict.with_options(gpu=gpu)
     print(f"submitting {job_name} on {gpu} ...")
-    files = fn.remote(sequence, smiles, job_name)
+    files = fn.remote(sequence, smiles, job_name, sequence_b)
 
     out_dir = Path("outputs") / job_name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -90,3 +104,7 @@ def main(
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
         print("wrote", dest)
+
+    from fold.analyze import report_interface_scores
+
+    report_interface_scores(out_dir)

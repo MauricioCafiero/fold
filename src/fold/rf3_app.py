@@ -90,3 +90,7 @@ def main(
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
         print("wrote", dest)
+
+    from fold.analyze import report_interface_scores
+
+    report_interface_scores(out_dir)

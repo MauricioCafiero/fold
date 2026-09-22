@@ -1,7 +1,11 @@
 # fold
 
 Protein structure prediction and protein/ligand cofolding, with no local GPU
-required.
+required. OpenFold3 also takes protein-protein (dimer) queries.
+
+> **Picking up this repo after the 2026-09-22 session?** Start with
+> [HANDOFF.md](HANDOFF.md) — what changed, what's verified, what's still
+> uncommitted.
 
 OpenFold3 and ESMFold need more VRAM than most machines have locally, so
 those run on [Modal](https://modal.com/) instead — all you need locally is
@@ -10,7 +14,7 @@ directly. The split:
 
 | Tool | What it does | Where it runs | Why |
 |---|---|---|---|
-| [OpenFold3](https://github.com/aqlaboratory/openfold-3) | Protein + ligand cofolding | Modal GPU (A10G) | needs 32GB+ VRAM |
+| [OpenFold3](https://github.com/aqlaboratory/openfold-3) | Protein + ligand cofolding, protein-protein (dimer) cofolding | Modal GPU (A10G) | needs 32GB+ VRAM |
 | [RosettaFold3 (RF3)](https://github.com/RosettaCommons/foundry) | Protein + ligand cofolding (independent method, for cross-checking) | Modal GPU (A10G) | same VRAM class as OpenFold3 |
 | [ESMFold](https://huggingface.co/facebook/esmfold_v1) | Single-sequence structure prediction | Modal GPU (A10G) | ~3B-param backbone, ~11GB of weights |
 | ESM2 | Protein embeddings + cosine similarity | Local CPU | small enough (650M params, ~2.6GB) to run comfortably on CPU |
@@ -109,6 +113,39 @@ neither `--input-file` nor `--job-name`, it falls back to the neutral name
 `prediction` rather than anything tied to the built-in smoke test. Same
 behavior applies identically to the RF3 CLI below.
 
+### Protein-protein (dimer) cofolding (OpenFold3)
+
+Pass `--sequence-b` for a second protein chain instead of (or alongside) a
+ligand — the query becomes chains A + B, no ligand:
+
+```bash
+uv run modal run --detach src/fold/app.py::main \
+  --sequence "CHAIN_A_SEQUENCE" \
+  --sequence-b "CHAIN_B_SEQUENCE" \
+  --job-name my_heterodimer
+```
+
+`examples/barnase_barstar.txt` is a ready-made example: the canonical
+barnase–barstar heterodimer, the complex the interface scoring below was
+cross-validated on. In an input file the second chain is a `SEQUENCE_B:`
+line, and the `SMILES:` line becomes optional — protein+ligand,
+protein+protein, and protein+protein+ligand queries are all valid:
+
+```
+SEQUENCE: TETSSHKAHTEAQVINTFDGV...
+SEQUENCE_B: MKKAVINGEQIRSISDLHQTLKK...
+```
+
+The no-Modal CLI takes the same flags:
+
+```bash
+python -m fold.local_run openfold3 --input-file examples/barnase_barstar.txt
+```
+
+Dimer support is OpenFold3-only for now — the RF3 app below still takes a
+single protein + ligand (its per-component MSA handling makes a second
+protein chain a bigger change).
+
 MSAs are computed remotely via the ColabFold MSA server (no local sequence
 databases needed). Output structures (`.cif`), per-sample confidence scores,
 and run metadata land in `outputs/<job_name>/`.
@@ -183,6 +220,53 @@ python -m fold.analyze cif-to-pdb outputs/hmgcr_rosuvastatin_smoketest/hmgcr_ros
 Uses [gemmi](https://gemmi.readthedocs.io/); preserves chains, HETATM
 records, and per-atom B-factors (pLDDT).
 
+### Interface confidence (ipSAE / pDockQ / pDockQ2)
+
+```bash
+python -m fold.analyze interface-scores outputs/rf3_hmgcr_rosuvastatin_smoketest
+#   interface A-B: ipSAE 0.265, pDockQ2 0.212, pDockQ 0.667
+```
+
+Every cofold run prints exactly this summary for its best-ranked model when
+it finishes (OpenFold3 and RF3, Modal and local alike) — the explicit
+command is only needed to re-check or inspect an older job dir. The summary
+is best-effort: if a job's confidences can't be scored (e.g. an image too
+old for PR #142), the run still succeeds and prints why.
+
+Per-interface confidence for the best-ranked model — [ipSAE
+(Dunbrack 2025)](https://doi.org/10.1101/2025.02.10.637595) fixes iptm's
+whole-chain bias by scoring only the residue pairs that actually touch the
+interface (interchain PAE below a cutoff, TM-score d0 rescaled to that
+"mini-chain"). Also reports pDockQ/pDockQ2. Computed from the model's full
+confidences JSON (PAE matrix + token chains) plus the CIF; implementation
+adapted from ColabFold's vendored version (MIT).
+
+Caveats worth knowing:
+
+- **Protein–protein interfaces** follow the published benchmark. **Protein–
+  ligand** interfaces run through the same math, but the ligand is a tiny
+  pseudo-chain of atom tokens, which deflates the d0 scaling — not
+  benchmarked by the paper, so treat protein–ligand ipSAE as experimental.
+- Needs a PAE matrix in `*_confidences.json`: RF3 outputs have one; OpenFold3
+  outputs do too with the current image (the repo pins
+  `openfold3:0.5-conda`, which includes
+  [openfold3 PR #142](https://github.com/aqlaboratory/openfold-3/pull/142);
+  older images raise a targeted error). OpenFold3's full confidences carry
+  no per-token arrays — chain membership is derived from the CIF (one token
+  per protein residue, one per ligand atom), and its per-atom `plddt` vector
+  supplies residue pLDDT.
+- RF3 writes `atom_plddts` on a 0–1 scale (AF2/AF3 use 0–100); the module
+  detects and rescales so pDockQ/pDockQ2 aren't pinned at their floor.
+
+Cross-validation on a real OpenFold3 output (barnase–barstar heterodimer,
+5 seeds): fold.ipsae's ipSAE matches the official
+[DunbrackLab](https://github.com/DunbrackLab/ipSAE) `ipsae.py` to all 6
+decimals on every seed. On the same files the official tool's
+pDockQ/pDockQ2 collapse to their formula floor — its AF3 path keys on
+`atom_plddts`, which OpenFold3 writes as `plddt`, and it silently zeroes
+its pLDDT input (it also undercounts chain tokens, since its CIF scan
+misses residues; its PAE-only ipSAE is unaffected by both).
+
 ### Binding energy (AutoDock Vina)
 
 Calculates a real, numeric binding affinity for a cofolded complex — not
@@ -218,10 +302,12 @@ Local-only checks that don't touch Modal or GPUs:
 uv run pytest
 ```
 
-Covers the `SEQUENCE:`/`SMILES:` input-file parser
-(`fold.inputs.parse_sequence_smiles_file`), picking the best-ranked
-structure from a job's output directory (`fold.results.find_best_cif`),
-and the receptor/ligand-splitting logic in `fold.binding_energy` — all pure
+Covers the `SEQUENCE:`/`SEQUENCE_B:`/`SMILES:` input-file parser
+(`fold.inputs.parse_input_file`, including dimer queries), the OpenFold3
+query-chain builder (protein+ligand, dimer, dimer+ligand), picking the
+best-ranked structure from a job's output directory (`fold.results.find_best_cif`),
+the receptor/ligand-splitting logic in `fold.binding_energy`, and the
+ipSAE/pDockQ/pDockQ2 interface-score math (`fold.ipsae`) — all pure
 file-parsing logic, tested against realistic fixtures without needing Vina,
 `obabel`, or a GPU.
 
@@ -233,9 +319,11 @@ reductase (HMGCR) as the test protein throughout:
 - **OpenFold3 cofolding** — the catalytic-domain construct from [PDB
   1HWL](https://www.rcsb.org/structure/1HWL) cofolded with rosuvastatin
   (SMILES from PubChem CID 446157, cross-checked against the PDB ligand
-  FBI), MSA computed via the ColabFold server. Result: `avg_plddt` 91.3,
-  `ptm` 0.90, `iptm` 0.87, `has_clash` 0.0 — a confident, clash-free
-  prediction, consistent with the real crystal structure it's based on.
+  FBI), MSA computed via the ColabFold server. Re-verified live on the
+  current image + weights (`openfold3:0.5-conda`, OpenBind
+  `of3-ob-2025-06-30-174k.pt` checkpoint): `avg_plddt` 88.5, `ptm` 0.88,
+  `iptm` 0.86, `has_clash` 0.0 — a confident, clash-free prediction,
+  consistent with the real crystal structure it's based on.
 
   ![Predicted rosuvastatin binding site](smoke_test.png)
 
@@ -243,6 +331,13 @@ reductase (HMGCR) as the test protein throughout:
   (crystallographic) binding site — several of the residues OpenFold3
   places in contact with the ligand match residues known experimentally to
   bind it in 1HWL.
+- **Protein-protein dimer (OpenFold3)** — barnase–barstar (5 seeds on A10G),
+  the run the interface scoring was cross-validated on: ipSAE matched the
+  official DunbrackLab `ipsae.py` to all 6 decimals on every seed, and the
+  scores are physically sane (ipSAE ~0.86 for a femtomolar-affinity
+  heterodimer; pDockQ2 0.90–0.91 — details in the interface-confidence
+  section above). This is the dimer path
+  (`--sequence-b` / `examples/barnase_barstar.txt`) verified end to end.
 - **RosettaFold3 cofolding** — same protein + ligand, MSA fetched from the
   ColabFold server as described above. Result: `overall_plddt` 0.87, `ptm`
   0.86, `iptm` 0.84, `has_clash` false — closely tracking OpenFold3's
@@ -251,6 +346,11 @@ reductase (HMGCR) as the test protein throughout:
   (Without an MSA, the same run instead gave `overall_plddt` 0.67, `ptm`
   0.36, `iptm` 0.39 — still clash-free and structurally valid, but a much
   less confident prediction, which is why the MSA step above exists.)
+  The same run's protein–ligand interface scores from
+  `fold.analyze interface-scores` (experimental per the caveats above):
+  ipSAE 0.265, pDockQ2 0.212, pDockQ 0.667 — ipSAE is deflated by the
+  ligand's 33-token pseudo-chain d0 scaling, while pDockQ (contact- and
+  pLDDT-based) indicates a real, well-ordered interface.
 - **ESMFold** — same HMGCR sequence, single-chain (no ligand). Produced a
   valid 3,483-atom PDB structure with per-residue confidence in the B-factor
   column.
