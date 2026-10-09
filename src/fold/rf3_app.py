@@ -72,12 +72,14 @@ def main(
 
     job_name = job_name or "prediction"
 
-    if not sequence or not smiles:
+    if not sequence and not smiles:
         from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES
 
-        sequence = sequence or HMGCR_1HWL_SEQUENCE
-        smiles = smiles or ROSUVASTATIN_SMILES
+        sequence = HMGCR_1HWL_SEQUENCE
+        smiles = ROSUVASTATIN_SMILES
         print("no --sequence/--smiles given, using HMGCR + rosuvastatin as a smoke test")
+    # sequence without smiles is a valid protein-only (apo) query: the
+    # components list carries the chain and no ligand.
 
     fn = predict.with_options(gpu=gpu)
     print(f"submitting {job_name} on {gpu} (use_msa={use_msa}) ...")

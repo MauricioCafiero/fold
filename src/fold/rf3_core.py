@@ -105,10 +105,10 @@ def ensure_weights(cache_dir: Path) -> Path:
 
 
 def build_query_components(sequence: str, smiles: str) -> list[dict]:
-    return [
-        {"seq": sequence, "chain_id": "A"},
-        {"smiles": smiles},
-    ]
+    components = [{"seq": sequence, "chain_id": "A"}]
+    if smiles:
+        components.append({"smiles": smiles})
+    return components
 
 
 def run_predict(

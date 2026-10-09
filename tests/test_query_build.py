@@ -32,3 +32,13 @@ def test_single_chain_is_apo():
     the old >=2-chains guard was removed 2026-10-09."""
     chains = build_query_chains("MLS", "")
     assert [c["chain_ids"] for c in chains] == [["A"]]
+
+
+def test_rf3_single_component_is_apo():
+    """rf3_core.build_query_components returns a no-ligand component list when
+    the SMILES is empty -- the same apo relaxation as OF3's."""
+    from fold.rf3_core import build_query_components
+
+    assert build_query_components("MLS", "") == [{"seq": "MLS", "chain_id": "A"}]
+    comps = build_query_components("MLS", "COc1ccc(C(=O)c2ccccc2)c(O)c1")
+    assert [c["chain_id"] if "chain_id" in c else "ligand" for c in comps] == ["A", "ligand"]
