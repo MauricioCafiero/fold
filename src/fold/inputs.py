@@ -56,12 +56,8 @@ def parse_input_file(path: str | Path) -> CofoldInput:
     # startswith("SEQUENCE:") above, so order the ifs from longest prefix.
     if not sequence:
         raise ValueError(f"{path} must contain a non-empty 'SEQUENCE:' line")
-    if not smiles and not sequence_b:
-        raise ValueError(
-            f"{path} must contain a non-empty 'SEQUENCE:' line plus a "
-            f"'SMILES:' line or a second-protein 'SEQUENCE_B:' line "
-            f"(protein+ligand or dimer query)"
-        )
+    # A bare SEQUENCE: line is a protein-only (apo) query: openfold3 accepts a
+    # single chain. SMILES adds a ligand, SEQUENCE_B a second protein chain.
     return CofoldInput(sequence=sequence, smiles=smiles or "", sequence_b=sequence_b or "")
 
 

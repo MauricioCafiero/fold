@@ -27,6 +27,8 @@ def test_dimer_plus_ligand():
     assert [c["molecule_type"] for c in chains] == ["protein", "protein", "ligand"]
 
 
-def test_needs_a_second_chain():
-    with pytest.raises(ValueError, match="sequence_b"):
-        build_query_chains("MLS", "")
+def test_single_chain_is_apo():
+    """A lone protein chain builds a valid apo query (no ligand, no partner);
+    the old >=2-chains guard was removed 2026-10-09."""
+    chains = build_query_chains("MLS", "")
+    assert [c["chain_ids"] for c in chains] == [["A"]]

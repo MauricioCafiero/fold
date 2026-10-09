@@ -86,12 +86,13 @@ def main(
     if sequence_b and not sequence:
         raise ValueError("--sequence is required together with --sequence-b")
 
-    if not sequence_b and (not sequence or not smiles):
+    if not sequence and not smiles and not sequence_b:
         from fold.targets import HMGCR_1HWL_SEQUENCE, ROSUVASTATIN_SMILES
 
-        sequence = sequence or HMGCR_1HWL_SEQUENCE
-        smiles = smiles or ROSUVASTATIN_SMILES
+        sequence = HMGCR_1HWL_SEQUENCE
+        smiles = ROSUVASTATIN_SMILES
         print("no --sequence/--smiles given, using HMGCR + rosuvastatin as a smoke test")
+    # sequence without smiles is a valid protein-only (apo) query
 
     fn = predict.with_options(gpu=gpu)
     print(f"submitting {job_name} on {gpu} ...")

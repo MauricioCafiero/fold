@@ -58,10 +58,7 @@ def build_query_chains(
         )
     if smiles:
         chains.append({"molecule_type": "ligand", "chain_ids": ["Z"], "smiles": smiles})
-    if len(chains) < 2:
-        raise ValueError(
-            "need a second protein sequence (sequence_b) or a ligand SMILES"
-        )
+    # a single protein chain is a valid apo query; openfold3 folds it alone
     return chains
 
 

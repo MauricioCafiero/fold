@@ -87,12 +87,17 @@ def test_parse_input_file_with_all_three_lines(tmp_path):
     assert not parsed.is_dimer
 
 
-def test_parse_input_file_requires_smiles_or_second_sequence(tmp_path):
+def test_parse_input_file_bare_sequence_is_apo(tmp_path):
+    """A bare SEQUENCE: line is a valid protein-only (apo) query --
+    openfold3 folds a single chain; the old requirement of a SMILES or
+    second sequence was removed 2026-10-09."""
     f = tmp_path / "input.txt"
     f.write_text("SEQUENCE: MLS\n")
 
-    with pytest.raises(ValueError, match="SMILES.*SEQUENCE_B"):
-        parse_input_file(f)
+    parsed = parse_input_file(f)
+    assert parsed.sequence == "MLS"
+    assert parsed.smiles == ""
+    assert parsed.sequence_b == ""
 
 
 def test_parse_sequence_smiles_file_still_rejects_dimer_file(tmp_path):
