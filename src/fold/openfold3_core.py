@@ -62,6 +62,33 @@ def build_query_chains(
     return chains
 
 
+def build_pocket_constraint(
+    pocket_residues: tuple[int, ...] | list[int],
+    max_distance: float = 4.0,
+    ligand_chain_id: str = "Z",
+) -> dict:
+    """OpenFold3 `pocket_constraint` biasing the ligand toward given residues.
+
+    Residue positions are 1-based query-sequence positions on chain A, which
+    is what the schema wants for a sequence input. Granularity is the residue:
+    there is no ligand-atom side, so a Boltz `contact` hint's `token2` has
+    nowhere to go. Present since openfold3 0.4.5, so the pinned 0.5.0 image
+    takes it as-is.
+
+    This BIASES; it does not enforce. Supplying it makes OpenFold3 rank 1,024
+    rigid ligand proposals on pocket proximity, clash and a contact penalty,
+    then seed partial-diffusion refinement over the last quarter of the
+    schedule -- and if its diversity filter leaves too few poses, the rest are
+    filled from the sorted list whatever their contact quality. So a run with
+    this set is "pocket-guided", never "forced".
+    """
+    return {
+        "ligand_chain_id": ligand_chain_id,
+        "pocket_residues": [["A", int(r)] for r in pocket_residues],
+        "max_distance": float(max_distance),
+    }
+
+
 def run_predict(
     sequence: str,
     smiles: str,
@@ -70,11 +97,16 @@ def run_predict(
     output_dir: Path,
     second_sequence: str = "",
     work_dir: Path = Path("/tmp"),
+    pocket_residues: tuple[int, ...] | list[int] = (),
+    pocket_max_distance: float = 4.0,
 ) -> Path:
     """Run one OpenFold3 cofolding job. Returns the job's output directory.
 
     Assumes the `run_openfold` CLI is already installed and importable on
     PATH in the current environment.
+
+    `pocket_residues` adds a pocket_constraint (see build_pocket_constraint --
+    it biases ligand placement, it does not force contacts).
     """
     ckpt_path = ensure_weights(cache_dir)
 
@@ -87,6 +119,17 @@ def run_predict(
         "use_main_msas": True,
         "use_paired_msas": True,
     }
+    if pocket_residues:
+        if not smiles:
+            raise ValueError("pocket_residues needs a ligand (smiles) to constrain")
+        # one per query: the schema's field is singular
+        query["pocket_constraint"] = build_pocket_constraint(
+            pocket_residues, pocket_max_distance
+        )
+        print(
+            f"pocket-guided run: {len(pocket_residues)} residues, "
+            f"max_distance {pocket_max_distance} A (biases placement, does not force it)"
+        )
     query_path = work_dir / f"{job_name}_query.json"
     query_path.write_text(json.dumps({"queries": {job_name: query}}, indent=2))
 

@@ -46,7 +46,12 @@ image = modal.Image.from_registry(
     timeout=30 * 60,
 )
 def predict(
-    sequence: str, smiles: str, job_name: str, second_sequence: str = ""
+    sequence: str,
+    smiles: str,
+    job_name: str,
+    second_sequence: str = "",
+    pocket_residues: tuple[int, ...] = (),
+    pocket_max_distance: float = 4.0,
 ) -> dict[str, bytes]:
     """Run one OpenFold3 cofolding query and return output files as bytes."""
     from fold.openfold3_core import run_predict
@@ -54,6 +59,8 @@ def predict(
     job_out = run_predict(
         sequence, smiles, job_name, Path(CACHE_DIR), Path(OUTPUT_DIR),
         second_sequence=second_sequence,
+        pocket_residues=pocket_residues,
+        pocket_max_distance=pocket_max_distance,
     )
     weights_volume.commit()
     outputs_volume.commit()
@@ -73,13 +80,24 @@ def main(
     input_file: str = "",
     gpu: str = "A10G",
     job_name: str = "",
+    pocket: str = "",
+    pocket_max_distance: float = 4.0,
 ):
+    pocket_residues: tuple[int, ...] = ()
     if input_file:
         from fold.inputs import parse_input_file
 
         parsed = parse_input_file(input_file)
         sequence, smiles, sequence_b = parsed.sequence, parsed.smiles, parsed.sequence_b
+        pocket_residues = parsed.pocket_residues
+        if parsed.pocket_residues:
+            pocket_max_distance = parsed.pocket_max_distance
         job_name = job_name or Path(input_file).stem
+    # --pocket "4,24,29,34" biases the ligand toward those chain-A residues
+    # (1-based), overriding an input file's POCKET: line. A bias, not a
+    # restraint -- see openfold3_core.build_pocket_constraint.
+    if pocket:
+        pocket_residues = tuple(int(t) for t in pocket.replace(",", " ").split())
 
     job_name = job_name or "prediction"
 
@@ -96,7 +114,9 @@ def main(
 
     fn = predict.with_options(gpu=gpu)
     print(f"submitting {job_name} on {gpu} ...")
-    files = fn.remote(sequence, smiles, job_name, sequence_b)
+    files = fn.remote(
+        sequence, smiles, job_name, sequence_b, pocket_residues, pocket_max_distance
+    )
 
     out_dir = Path("outputs") / job_name
     out_dir.mkdir(parents=True, exist_ok=True)

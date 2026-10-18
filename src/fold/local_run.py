@@ -48,15 +48,28 @@ def openfold3(
     job_name: str = "",
     cache_dir: str = "./cache/openfold3",
     output_dir: str = "./outputs",
+    pocket: str = "",
+    pocket_max_distance: float = 4.0,
 ):
-    """Run OpenFold3 cofolding on this machine's GPU."""
+    """Run OpenFold3 cofolding on this machine's GPU.
+
+    --pocket "4,24,29,34" biases the ligand toward those chain-A residues
+    (1-based). It is a bias, not a restraint: see openfold3_core.
+    build_pocket_constraint. An input file's POCKET: line does the same.
+    """
     from fold.openfold3_core import run_predict
 
+    pocket_residues: tuple[int, ...] = ()
     if input_file:
         from fold.inputs import parse_input_file
 
         parsed = parse_input_file(input_file)
         sequence, smiles, sequence_b = parsed.sequence, parsed.smiles, parsed.sequence_b
+        pocket_residues = parsed.pocket_residues
+        if parsed.pocket_residues:
+            pocket_max_distance = parsed.pocket_max_distance
+    if pocket:
+        pocket_residues = tuple(int(t) for t in pocket.replace(",", " ").split())
     if sequence_b and not sequence:
         raise ValueError("--sequence is required together with --sequence-b")
     if not sequence_b and (not sequence or not smiles):
@@ -67,6 +80,8 @@ def openfold3(
     job_out = run_predict(
         sequence, smiles, job_name, Path(cache_dir), Path(output_dir),
         second_sequence=sequence_b,
+        pocket_residues=pocket_residues,
+        pocket_max_distance=pocket_max_distance,
     )
     print(f"done -- outputs in {job_out}")
 

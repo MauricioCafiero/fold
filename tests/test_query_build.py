@@ -42,3 +42,21 @@ def test_rf3_single_component_is_apo():
     assert build_query_components("MLS", "") == [{"seq": "MLS", "chain_id": "A"}]
     comps = build_query_components("MLS", "COc1ccc(C(=O)c2ccccc2)c(O)c1")
     assert [c["chain_id"] if "chain_id" in c else "ligand" for c in comps] == ["A", "ligand"]
+
+def test_pocket_constraint_shape():
+    """OpenFold3's schema: residue-level [chain_id, residue_id] pairs and a
+    ligand CHAIN (no ligand atom), so a Boltz contact hint's token2 is
+    dropped. Present since openfold3 0.4.5; the pinned 0.5.0 takes it."""
+    from fold.openfold3_core import build_pocket_constraint
+
+    assert build_pocket_constraint((4, 24), 4.2) == {
+        "ligand_chain_id": "Z",
+        "pocket_residues": [["A", 4], ["A", 24]],
+        "max_distance": 4.2,
+    }
+
+
+def test_pocket_constraint_default_distance():
+    from fold.openfold3_core import build_pocket_constraint
+
+    assert build_pocket_constraint([7])["max_distance"] == 4.0

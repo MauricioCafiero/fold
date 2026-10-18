@@ -109,3 +109,46 @@ def test_parse_sequence_smiles_file_still_rejects_dimer_file(tmp_path):
 
     with pytest.raises(ValueError, match="SEQUENCE.*SMILES"):
         parse_sequence_smiles_file(f)
+
+
+def test_parse_input_file_pocket(tmp_path):
+    """POCKET: becomes 1-based chain-A residue positions, comma or space
+    separated, with POCKET_MAX_DISTANCE matched before POCKET (same
+    longest-prefix-first rule as SEQUENCE_B)."""
+    f = tmp_path / "pocket.txt"
+    f.write_text(
+        "SEQUENCE: MLSRLFRMHG\nSMILES: CCO\nPOCKET: 4,8 9\nPOCKET_MAX_DISTANCE: 4.2\n"
+    )
+
+    parsed = parse_input_file(f)
+
+    assert parsed.pocket_residues == (4, 8, 9)
+    assert parsed.pocket_max_distance == 4.2
+
+
+def test_pocket_defaults_and_absence(tmp_path):
+    f = tmp_path / "input.txt"
+    f.write_text("SEQUENCE: MLS\nSMILES: CCO\n")
+
+    parsed = parse_input_file(f)
+
+    assert parsed.pocket_residues == ()
+    assert parsed.pocket_max_distance == 4.0
+
+
+def test_pocket_out_of_range_raises(tmp_path):
+    f = tmp_path / "input.txt"
+    f.write_text("SEQUENCE: MLS\nSMILES: CCO\nPOCKET: 1,9\n")
+
+    with pytest.raises(ValueError, match="out of range"):
+        parse_input_file(f)
+
+
+def test_pocket_without_ligand_raises(tmp_path):
+    """A pocket constraint names the ligand chain it steers, so there has to
+    be one."""
+    f = tmp_path / "input.txt"
+    f.write_text("SEQUENCE: MLS\nPOCKET: 1\n")
+
+    with pytest.raises(ValueError, match="SMILES"):
+        parse_input_file(f)
