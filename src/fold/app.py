@@ -52,6 +52,7 @@ def predict(
     second_sequence: str = "",
     pocket_residues: tuple[int, ...] = (),
     pocket_max_distance: float = 4.0,
+    seed: int = -1,
 ) -> dict[str, bytes]:
     """Run one OpenFold3 cofolding query and return output files as bytes."""
     from fold.openfold3_core import run_predict
@@ -61,6 +62,7 @@ def predict(
         second_sequence=second_sequence,
         pocket_residues=pocket_residues,
         pocket_max_distance=pocket_max_distance,
+        seed=None if seed < 0 else seed,
     )
     weights_volume.commit()
     outputs_volume.commit()
@@ -82,6 +84,7 @@ def main(
     job_name: str = "",
     pocket: str = "",
     pocket_max_distance: float = 4.0,
+    seed: int = -1,
 ):
     pocket_residues: tuple[int, ...] = ()
     if input_file:
@@ -113,9 +116,10 @@ def main(
     # sequence without smiles is a valid protein-only (apo) query
 
     fn = predict.with_options(gpu=gpu)
-    print(f"submitting {job_name} on {gpu} ...")
+    # --seed k replaces OpenFold3's default seed 42 (-1 = keep the default)
+    print(f"submitting {job_name} on {gpu} (seed {'default 42' if seed < 0 else seed}) ...")
     files = fn.remote(
-        sequence, smiles, job_name, sequence_b, pocket_residues, pocket_max_distance
+        sequence, smiles, job_name, sequence_b, pocket_residues, pocket_max_distance, seed
     )
 
     out_dir = Path("outputs") / job_name

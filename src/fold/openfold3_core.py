@@ -99,6 +99,7 @@ def run_predict(
     work_dir: Path = Path("/tmp"),
     pocket_residues: tuple[int, ...] | list[int] = (),
     pocket_max_distance: float = 4.0,
+    seed: int | None = None,
 ) -> Path:
     """Run one OpenFold3 cofolding job. Returns the job's output directory.
 
@@ -107,6 +108,11 @@ def run_predict(
 
     `pocket_residues` adds a pocket_constraint (see build_pocket_constraint --
     it biases ligand placement, it does not force contacts).
+
+    `seed` overrides OpenFold3's default experiment_settings.seeds = [42]
+    via a runner yaml. Unset, every run is seed 42 and a re-run reproduces
+    the same fold (to ~0.02 A, measured 2026-11-01), so fold replicates
+    need a distinct seed per draw.
     """
     ckpt_path = ensure_weights(cache_dir)
 
@@ -145,6 +151,10 @@ def run_predict(
         "--use_msa_server=true",
         "--use_templates=false",
     ]
+    if seed is not None:
+        runner_path = work_dir / f"{job_name}_runner.yml"
+        runner_path.write_text(f"experiment_settings:\n  seeds: [{int(seed)}]\n")
+        cmd.append(f"--runner_yaml={runner_path}")
 
     print("running:", " ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True)
